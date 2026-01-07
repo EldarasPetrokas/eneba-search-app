@@ -20,7 +20,6 @@ app.use(
       if (allowedOrigins.includes(origin)) return cb(null, true);
       return cb(new Error("Not allowed by CORS"));
     },
-    credentials: false,
   })
 );
 
@@ -38,8 +37,24 @@ app.get("/health", async (_req, res) => {
   }
 });
 
+function normalizeSearch(s) {
+  const q = String(s || "").toLowerCase().trim();
+  if (!q) return q;
+
+  const aliases = {
+    rdr2: "red dead redemption 2",
+    "reddead2": "red dead redemption 2",
+    fifa: "fifa 23",
+    fifa23: "fifa 23",
+    split: "split fiction",
+  };
+
+  return aliases[q] || q;
+}
+
 app.get("/list", async (req, res) => {
-  const search = String(req.query.search ?? "").trim();
+  const raw = String(req.query.search ?? "").trim();
+  const search = normalizeSearch(raw);
 
   try {
     if (!search) {
@@ -71,10 +86,14 @@ app.get("/list", async (req, res) => {
         platform,
         region,
         store,
-        greatest(similarity(name, $1), 0) as score
+        similarity(name, $1) as score
       from public.games
-      where name % $1 OR name ilike '%' || $1 || '%'
-      order by score desc, name asc
+      where
+        similarity(name, $1) > 0.10
+        or name ilike '%' || $1 || '%'
+      order by
+        score desc,
+        name asc
       limit 30;
       `,
       [search]
